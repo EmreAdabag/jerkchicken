@@ -56,7 +56,7 @@ if __name__ == '__main__':
     msg = ''
 
     if len(chickenlist) == 0:
-        msg += '\N{white heavy check mark} no jerk chicken today \N{white heavy check mark}'
+        msg += '\N{white heavy check mark} no jerk chicken today'
     else:
         for i, m in enumerate(chickenlist):
             location = m[0]
@@ -64,11 +64,11 @@ if __name__ == '__main__':
 
             if "JJs" in location:
                 location = "JJs"
-            if "Chef Mike" in location:
+            else if "Chef Mike" in location:
                 location = "Chef Mike"
-            if "John Jay" in location:
+            else if "John Jay" in location:
                 location = "John Jay"
-            if "Ferris" in location:
+            else if "Ferris" in location:
                 location = "Ferris"
 
             if location in {"JJs", "Chef Mike", "John Jay", "Ferris"}:
