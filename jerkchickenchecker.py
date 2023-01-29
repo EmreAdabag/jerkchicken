@@ -9,7 +9,8 @@ jerk_chicken_dict = {367 : "jerk chicken",
 3565: "jerk chicken wrap",
 3585: "JJs jerk chicken quesadilla with tamarind sauce",
 2355: "jerk chicken",
-3626: "vegan jerk chicken"}
+3626: "vegan jerk chicken",
+182: "test meal"}
 
 menu_url = "https://dining.columbia.edu/cu_dining/rest/menus/nested"
 
@@ -18,6 +19,7 @@ def getchickenlist():
     
     chicken_days = []
     today = datetime.today().date
+    today = datetime.strptime("2023-01-30T15:59:00", '%Y-%m-%dT%H:%M:%S').date 
 
     menus_json = requests.get(menu_url).json()
 
@@ -61,11 +63,11 @@ if __name__ == '__main__':
 
             if "JJs" in location:
                 location = "JJs"
-            else if "Chef Mike" in location:
+            elif "Chef Mike" in location:
                 location = "Chef Mike"
-            else if "John Jay" in location:
+            elif "John Jay" in location:
                 location = "John Jay"
-            else if "Ferris" in location:
+            elif "Ferris" in location:
                 location = "Ferris"
 
             if location in {"JJs", "Chef Mike", "John Jay", "Ferris"}:
