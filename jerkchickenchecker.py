@@ -15,16 +15,17 @@ menu_url = "https://dining.columbia.edu/cu_dining/rest/menus/nested"
 
 
 def getchickenlist():
-    menus_json = requests.get(menu_url).json()
-
+    
     chicken_days = []
     today = datetime.today().date
 
+    menus_json = requests.get(menu_url).json()
 
     for menu in menus_json:
+    
         date_range_fields = menu["date_range_fields"][0]
-
         date_from = date_range_fields["date_from"]
+
         if datetime.strptime(date_from, '%Y-%m-%dT%H:%M:%S').date == today:
             continue
             
@@ -39,19 +40,15 @@ def getchickenlist():
 
     return list(set(chicken_days))
 
-def api():
+
+def tweet(message: str):
     auth = tweepy.OAuthHandler(keys.api_key, keys.api_secret)
     auth.set_access_token(keys.access_token, keys.access_token_secret)
-
-    return tweepy.API(auth)
-
-def tweet(api: tweepy.API, message: str):
-    api.update_status(message)
+    tweepy.API(auth).update_status(message)
 
 
 if __name__ == '__main__':
     
-    api = api()
     chickenlist = getchickenlist()
     msg = ''
 
@@ -74,4 +71,4 @@ if __name__ == '__main__':
             if location in {"JJs", "Chef Mike", "John Jay", "Ferris"}:
                 msg += "{} at {} today{}".format(jerk_chicken_dict[meal], location, "" if i == len(chickenlist)-1 else "\n")
 
-    tweet(api, msg)
+    tweet(msg)
