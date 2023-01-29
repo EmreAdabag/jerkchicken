@@ -61,11 +61,11 @@ if __name__ == '__main__':
 
             if "JJs" in location:
                 location = "JJs"
-            else if "Chef Mike" in location:
+            elif "Chef Mike" in location:
                 location = "Chef Mike"
-            else if "John Jay" in location:
+            elif "John Jay" in location:
                 location = "John Jay"
-            else if "Ferris" in location:
+            elif "Ferris" in location:
                 location = "Ferris"
 
             if location in {"JJs", "Chef Mike", "John Jay", "Ferris"}:
