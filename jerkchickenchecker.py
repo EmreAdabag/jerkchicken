@@ -9,8 +9,7 @@ jerk_chicken_dict = {367 : "jerk chicken",
 3565: "jerk chicken wrap",
 3585: "JJs jerk chicken quesadilla with tamarind sauce",
 2355: "jerk chicken",
-3626: "vegan jerk chicken",
-182: "test"}
+3626: "vegan jerk chicken"}
 
 menu_url = "https://dining.columbia.edu/cu_dining/rest/menus/nested"
 
@@ -19,8 +18,7 @@ def getchickenlist():
     menus_json = requests.get(menu_url).json()
 
     chicken_days = []
-    # today = datetime.today().date
-    today = datetime.strptime("2023-01-30T15:59:00", '%Y-%m-%dT%H:%M:%S').date 
+    today = datetime.today().date
 
 
     for menu in menus_json:
