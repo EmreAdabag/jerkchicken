@@ -11,18 +11,16 @@ jerk_chicken_dict = {367 : "jerk chicken",
 2355: "jerk chicken",
 3626: "vegan jerk chicken"}
 
-menu_url = "https://dining.columbia.edu/cu_dining/rest/menus/nested"
+FOOD_URL = "https://dining.columbia.edu/cu_dining/rest/meals"
+MENU_URL = "https://dining.columbia.edu/cu_dining/rest/menus/nested"
 
-
-def getchickenlist():
-
+def get_chicken_meals():
     chicken_days = []
     today = datetime.today().date
 
-    menus_json = requests.get(menu_url).json()
+    menus_json = requests.get(MENU_URL).json()
 
     for menu in menus_json:
-
         date_range_fields = menu["date_range_fields"][0]
         date_from = date_range_fields["date_from"]
 
@@ -34,41 +32,50 @@ def getchickenlist():
         if date_range_fields["stations"]:
             for station in date_range_fields["stations"]:
                 for meal in station["meals"]:
-                    if int(meal) in jerk_chicken_dict:
-                        chicken_days.append((location, int(meal)))
-
+                    if meal in jerk_chicken_dict:
+                        chicken_days.append((location, meal))
 
     return list(set(chicken_days))
-
 
 def tweet(message: str):
     auth = tweepy.OAuthHandler(keys.api_key, keys.api_secret)
     auth.set_access_token(keys.access_token, keys.access_token_secret)
     tweepy.API(auth).update_status(message)
 
+def main():
+    chicken_meals = get_chicken_meals()
 
-if __name__ == '__main__':
+    if len(chicken_meals) == 0:
+        """
+        No jerk chicken today
+        """
 
-    chickenlist = getchickenlist()
-    msg = ''
-
-    if len(chickenlist) == 0:
-        msg += '\N{white heavy check mark} no jerk chicken today'
+        tweet('\N{white heavy check mark} No jerk chicken today')
     else:
-        for i, m in enumerate(chickenlist):
+        """
+        Jerk chicken today!
+        
+         - ... at ...
+         - ... at ...
+         ...
+        """
+
+        msg = ["\N{Police Cars Revolving Light} Jerk chicken today!\n"]
+        for m in chicken_meals:
             location = m[0]
             meal = m[1]
 
-            if "JJs" in location:
-                location = "JJs"
-            elif "Chef Mike" in location:
-                location = "Chef Mike"
-            elif "John Jay" in location:
-                location = "John Jay"
-            elif "Ferris" in location:
-                location = "Ferris"
+            for hall in ["JJs", "Chef Mike", "John Jay", "Ferris"]:
+                if hall in location:
+                    location = hall
+                    break
+            else:
+                # no break
+                location = "a dining hall"
 
-            if location in {"JJs", "Chef Mike", "John Jay", "Ferris"}:
-                msg += "\N{Police Cars Revolving Light} {} at {} today{}".format(jerk_chicken_dict[meal], location, "" if i == len(chickenlist)-1 else "\n")
+            msg.append(f" - {jerk_chicken_dict[meal]} at {location}")
 
-    tweet(msg)
+        tweet("\n".join(msg))
+
+if __name__ == '__main__':
+    main()
