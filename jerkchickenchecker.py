@@ -2,13 +2,26 @@ import requests
 import html
 from datetime import datetime
 import tweepy
-import keys
+import json
+
+from keys import api_key, api_secret, bearer_token, access_token, access_token_secret
 
 FOOD_URL = "https://dining.columbia.edu/cu_dining/rest/meals"
 MENU_URL = "https://dining.columbia.edu/cu_dining/rest/menus/nested"
 
+
+def log_error(message):
+    with open("errorlog.txt", "a") as f:
+        f.write(f"{datetime.now().strftime('%m/%d/%Y, %H:%M:%S')} {message}\n\n")
+
+
 def get_chicken_dict() -> dict[str, str]:
-    foods_json = requests.get(FOOD_URL).json()
+    foods = requests.get(FOOD_URL)
+    if foods.status_code != 200:
+        log_error("error fetching chicken dict")
+        exit()
+
+    foods_json = foods.json()
     jerk_chicken_dict = {}
 
     for food in foods_json:
@@ -18,11 +31,19 @@ def get_chicken_dict() -> dict[str, str]:
 
     return jerk_chicken_dict
 
-def get_chicken_meals(jerk_chicken_dict: dict[str, str]):
-    chicken_days = []
-    today = datetime.today().date()
 
-    menus_json = requests.get(MENU_URL).json()
+def get_menus():
+    menus = requests.get(MENU_URL)
+    print(menus.status_code)
+    if menus.status_code != 200:
+        log_error("error fetching menu")
+        exit()
+
+    return menus.json()
+    
+
+def get_chicken_meals(jerk_chicken_dict: dict[str, str], menus_json: list, target_date):
+    chicken_days = []
 
     for menu in menus_json:
 
@@ -30,7 +51,7 @@ def get_chicken_meals(jerk_chicken_dict: dict[str, str]):
         for meal_of_day in menu["date_range_fields"]:
             date_from = meal_of_day["date_from"]
 
-            if datetime.strptime(date_from, '%Y-%m-%dT%H:%M:%S').date() != today:
+            if datetime.strptime(date_from, '%Y-%m-%dT%H:%M:%S').date() != target_date:
                 continue
 
             location = meal_of_day["title"]
@@ -42,21 +63,15 @@ def get_chicken_meals(jerk_chicken_dict: dict[str, str]):
 
     return chicken_days
 
-def tweet(message: str):
-    auth = tweepy.OAuthHandler(keys.api_key, keys.api_secret)
-    auth.set_access_token(keys.access_token, keys.access_token_secret)
-    tweepy.API(auth).update_status(message)
 
-def main():
-    jerk_chicken_dict = get_chicken_dict()
-    chicken_meals = get_chicken_meals(jerk_chicken_dict)
+def get_chicken_message(jerk_chicken_dict, chicken_meals):
 
     if len(chicken_meals) == 0:
         """
         No jerk chicken today
         """
+        msg = '\N{white heavy check mark} No jerk chicken today'
 
-        tweet('\N{white heavy check mark} No jerk chicken today')
     else:
         """
         Jerk chicken today!
@@ -90,8 +105,33 @@ def main():
                     break
 
             msg.append(f" - {jerk_chicken_dict[meal]} at {location_with_time}")
+        
+    return msg
 
-        tweet("\n".join(msg))
+
+def tweet(message: str):
+    try:
+        auth = tweepy.OAuthHandler(keys.api_key, keys.api_secret)
+        auth.set_access_token(keys.access_token, keys.access_token_secret)
+        tweepy.API(auth).update_status(message)
+    except tweepy.TweepyException as e:
+        log_error(e)
+        exit()
+
+
+
+def main():
+
+    jerk_chicken_dict = get_chicken_dict()
+    menus = get_menus()
+
+    chicken_meals = get_chicken_meals(jerk_chicken_dict, menus, datetime.today().date())
+    
+    msg = get_chicken_message(jerk_chicken_dict, chicken_meals)
+
+    tweet("\n".join(msg))
+
+
 
 if __name__ == '__main__':
     main()
