@@ -1,4 +1,5 @@
 import requests
+import html
 from datetime import datetime
 import tweepy
 import keys
@@ -11,8 +12,9 @@ def get_chicken_dict() -> dict[str, str]:
     jerk_chicken_dict = {}
 
     for food in foods_json:
-        if "jerk chicken" in food["title"].lower():
-            jerk_chicken_dict[food["nid"]] = food["title"]
+        food_name = html.unescape(food["title"])
+        if "jerk chicken" in food_name.lower():
+            jerk_chicken_dict[food["nid"]] = food_name
 
     return jerk_chicken_dict
 
