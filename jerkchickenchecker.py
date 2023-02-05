@@ -40,13 +40,21 @@ def get_chicken_meals(jerk_chicken_dict: dict[str, str]):
 
     return chicken_days
 
-def make_tweet(jerk_chicken_dict, chicken_meals) -> str:
+def tweet(message: str):
+    auth = tweepy.OAuthHandler(keys.api_key, keys.api_secret)
+    auth.set_access_token(keys.access_token, keys.access_token_secret)
+    tweepy.API(auth).update_status(message)
+
+def main():
+    jerk_chicken_dict = get_chicken_dict()
+    chicken_meals = get_chicken_meals(jerk_chicken_dict)
+
     if len(chicken_meals) == 0:
         """
         No jerk chicken today
         """
 
-        return '\N{white heavy check mark} No jerk chicken today'
+        tweet('\N{white heavy check mark} No jerk chicken today')
     else:
         """
         Jerk chicken today!
@@ -63,6 +71,7 @@ def make_tweet(jerk_chicken_dict, chicken_meals) -> str:
             location_with_time = "a dining hall"  # default message
 
             # dining halls with multiple meals a day
+            # gets both dining hall and meal of day
             for hall in ["John Jay", "Ferris"]:
                 if hall in location:
                     for meal_of_day in ["Breakfast", "Lunch", "Dinner"]:
@@ -72,6 +81,7 @@ def make_tweet(jerk_chicken_dict, chicken_meals) -> str:
                     break
 
             # dining halls with one meal a day
+            # gets only dining hall
             for hall in ["JJs", "Chef Don's", "Chef Mike's"]:
                 if hall in location:
                     location_with_time = hall
@@ -79,17 +89,7 @@ def make_tweet(jerk_chicken_dict, chicken_meals) -> str:
 
             msg.append(f" - {jerk_chicken_dict[meal]} at {location_with_time}")
 
-        return "\n".join(msg)
-
-def tweet(message: str):
-    auth = tweepy.OAuthHandler(keys.api_key, keys.api_secret)
-    auth.set_access_token(keys.access_token, keys.access_token_secret)
-    tweepy.API(auth).update_status(message)
-
-def main():
-    jerk_chicken_dict = get_chicken_dict()
-    chicken_meals = get_chicken_meals(jerk_chicken_dict)
-    tweet(make_tweet(jerk_chicken_dict, chicken_meals))
+        tweet("\n".join(msg))
 
 if __name__ == '__main__':
     main()
