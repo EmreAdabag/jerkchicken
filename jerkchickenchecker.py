@@ -15,7 +15,7 @@ def log_error(message):
         f.write(f"{datetime.now().strftime('%m/%d/%Y, %H:%M:%S')} {message}\n\n")
 
 
-def get_chicken_dict() -> dict[str, str]:
+def get_chicken_dict() -> dict:
     foods = requests.get(FOOD_URL)
     if foods.status_code != 200:
         log_error("error fetching chicken dict")
@@ -42,7 +42,7 @@ def get_menus():
     return menus.json()
     
 
-def get_chicken_meals(jerk_chicken_dict: dict[str, str], menus_json: list, target_date):
+def get_chicken_meals(jerk_chicken_dict: dict, menus_json: list, target_date):
     chicken_days = []
 
     for menu in menus_json:
@@ -111,8 +111,8 @@ def get_chicken_message(jerk_chicken_dict, chicken_meals):
 
 def tweet(message: str):
     try:
-        auth = tweepy.OAuthHandler(keys.api_key, keys.api_secret)
-        auth.set_access_token(keys.access_token, keys.access_token_secret)
+        auth = tweepy.OAuthHandler(api_key, api_secret)
+        auth.set_access_token(access_token, access_token_secret)
         tweepy.API(auth).update_status(message)
     except tweepy.TweepyException as e:
         log_error(e)
