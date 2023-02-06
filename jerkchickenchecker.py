@@ -2,9 +2,8 @@ import requests
 import html
 from datetime import datetime
 import tweepy
-import json
 
-from keys import api_key, api_secret, bearer_token, access_token, access_token_secret
+from keys import api_key, api_secret, access_token, access_token_secret
 
 FOOD_URL = "https://dining.columbia.edu/cu_dining/rest/meals"
 MENU_URL = "https://dining.columbia.edu/cu_dining/rest/menus/nested"
