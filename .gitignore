@@ -1,4 +1,5 @@
 *
+!.gitignore
 !jerkchickenchecker.py
 !README.md
 !requirements.txt
