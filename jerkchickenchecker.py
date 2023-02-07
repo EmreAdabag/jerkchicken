@@ -11,16 +11,9 @@ ACCESS_SECRET = os.environ["ACCESS_SECRET"]
 
 FOOD_URL = "https://dining.columbia.edu/cu_dining/rest/meals"
 MENU_URL = "https://dining.columbia.edu/cu_dining/rest/menus/nested"
+TWITTER_URL = "https://api.twitter.com/2/tweets"
 
-def format_response(res):
-    return "(%d): %s" % (res.status_code, res.text)
-
-def get_chicken_dict():
-    foods = requests.get(FOOD_URL)
-    if foods.status_code != 200:
-        raise RuntimeError("error fetching food items " + format_response(foods))
-
-    foods_json = foods.json()
+def get_chicken_dict(foods_json):
     jerk_chicken_dict = {}
 
     for food in foods_json:
@@ -29,14 +22,6 @@ def get_chicken_dict():
             jerk_chicken_dict[food["nid"]] = food_name
 
     return jerk_chicken_dict
-
-def get_menus():
-    menus = requests.get(MENU_URL)
-    print(menus.status_code)
-    if menus.status_code != 200:
-        raise RuntimeError("error fetching menu " + format_response(menus))
-
-    return menus.json()
 
 def get_chicken_meals(jerk_chicken_dict, menus_json, target_date):
     chicken_days = []
@@ -60,7 +45,6 @@ def get_chicken_meals(jerk_chicken_dict, menus_json, target_date):
     return chicken_days
 
 def get_tweet(jerk_chicken_dict, chicken_meals, the_date):
-    
     the_date = "%d/%d/%d" % (the_date.month, the_date.day, the_date.year)
 
     if len(chicken_meals) == 0:
@@ -68,7 +52,6 @@ def get_tweet(jerk_chicken_dict, chicken_meals, the_date):
         No jerk chicken today (2/6/23)
         """
         return '\N{white heavy check mark} No jerk chicken today (%s)' % (the_date)
-
     else:
         """
         Jerk chicken today (2/6/23)
@@ -105,23 +88,27 @@ def get_tweet(jerk_chicken_dict, chicken_meals, the_date):
         
         return "\n".join(msg)
 
-# from https://developer.twitter.com/en/docs/tutorials/how-to-create-a-twitter-bot-with-twitter-api-v2
-def connect_to_oauth(consumer_key, consumer_secret, acccess_token, access_token_secret):
-   url = "https://api.twitter.com/2/tweets"
-   auth = OAuth1(consumer_key, consumer_secret, acccess_token, access_token_secret)
-   return url, auth
-
 def main(event, context):
-    jerk_chicken_dict = get_chicken_dict()
-    menus = get_menus()
-    today = datetime.today().date()
+    foods = requests.get(FOOD_URL)
+    if foods.status_code != 200:
+        raise RuntimeError("error fetching food items: " + foods.text)
 
-    chicken_meals = get_chicken_meals(jerk_chicken_dict, menus, today)
+    jerk_chicken_dict = get_chicken_dict(foods.json())
+
+    menus = requests.get(MENU_URL)
+    if menus.status_code != 200:
+        raise RuntimeError("error fetching menu: " + menus.text)
+
+    today = datetime.today().date()
+    chicken_meals = get_chicken_meals(jerk_chicken_dict, menus.json(), today)
 
     tweet = get_tweet(jerk_chicken_dict, chicken_meals, today)
-    payload = {"text": f"{tweet}"}
+    payload = {"text": tweet}
 
-    url, auth = connect_to_oauth(API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET)
-    res = requests.post(auth=auth, url=url, json=payload)
+    res = requests.post(
+        auth=OAuth1(API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET), 
+        url=TWITTER_URL, 
+        json=payload
+    )
     if res.status_code != 200:
-        raise RuntimeError("failed to post tweet " + format_response(res))
+        raise RuntimeError("failed to post tweet '%s': %s" % (tweet, res.text))
