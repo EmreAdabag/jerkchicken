@@ -1,24 +1,24 @@
+import os
 import requests
 import html
 from datetime import datetime
-import tweepy
+from requests_oauthlib import OAuth1
 
-from keys import api_key, api_secret, access_token, access_token_secret
+API_KEY = os.environ["API_KEY"]
+API_SECRET = os.environ["API_SECRET"]
+ACCESS_TOKEN = os.environ["ACCESS_TOKEN"]
+ACCESS_SECRET = os.environ["ACCESS_SECRET"]
 
 FOOD_URL = "https://dining.columbia.edu/cu_dining/rest/meals"
 MENU_URL = "https://dining.columbia.edu/cu_dining/rest/menus/nested"
 
+def format_response(res):
+    return "(%d): %s" % (res.status_code, res.text)
 
-def log_error(message):
-    with open("errorlog.txt", "a") as f:
-        f.write(f"{datetime.now().strftime('%m/%d/%Y, %H:%M:%S')} {message}\n\n")
-
-
-def get_chicken_dict() -> dict:
+def get_chicken_dict():
     foods = requests.get(FOOD_URL)
     if foods.status_code != 200:
-        log_error("error fetching chicken dict")
-        exit()
+        raise RuntimeError("error fetching food items " + format_response(foods))
 
     foods_json = foods.json()
     jerk_chicken_dict = {}
@@ -30,18 +30,15 @@ def get_chicken_dict() -> dict:
 
     return jerk_chicken_dict
 
-
 def get_menus():
     menus = requests.get(MENU_URL)
     print(menus.status_code)
     if menus.status_code != 200:
-        log_error("error fetching menu")
-        exit()
+        raise RuntimeError("error fetching menu " + format_response(menus))
 
     return menus.json()
-    
 
-def get_chicken_meals(jerk_chicken_dict: dict, menus_json: list, target_date):
+def get_chicken_meals(jerk_chicken_dict, menus_json, target_date):
     chicken_days = []
 
     for menu in menus_json:
@@ -62,25 +59,26 @@ def get_chicken_meals(jerk_chicken_dict: dict, menus_json: list, target_date):
 
     return chicken_days
 
-
-def get_chicken_message(jerk_chicken_dict, chicken_meals):
+def get_tweet(jerk_chicken_dict, chicken_meals, the_date):
+    
+    the_date = "%d/%d/%d" % (the_date.month, the_date.day, the_date.year)
 
     if len(chicken_meals) == 0:
         """
-        No jerk chicken today
+        No jerk chicken today (2/6/23)
         """
-        msg = '\N{white heavy check mark} No jerk chicken today'
+        return '\N{white heavy check mark} No jerk chicken today (%s)' % (the_date)
 
     else:
         """
-        Jerk chicken today!
+        Jerk chicken today (2/6/23)
 
          - Jerk Chicken at John Jay for lunch
          - Jerk Chicken Sub at Chef Mike's
          ...
         """
 
-        msg = ["\N{Police Cars Revolving Light} Jerk chicken today!\n"]
+        msg = ["\N{Police Cars Revolving Light} Jerk chicken today (%s)\n" % (the_date)]
         for m in chicken_meals:
             location, meal = m
 
@@ -105,32 +103,25 @@ def get_chicken_message(jerk_chicken_dict, chicken_meals):
 
             msg.append(f" - {jerk_chicken_dict[meal]} at {location_with_time}")
         
-    return msg
+        return "\n".join(msg)
 
+# from https://developer.twitter.com/en/docs/tutorials/how-to-create-a-twitter-bot-with-twitter-api-v2
+def connect_to_oauth(consumer_key, consumer_secret, acccess_token, access_token_secret):
+   url = "https://api.twitter.com/2/tweets"
+   auth = OAuth1(consumer_key, consumer_secret, acccess_token, access_token_secret)
+   return url, auth
 
-def tweet(message: str):
-    try:
-        auth = tweepy.OAuthHandler(api_key, api_secret)
-        auth.set_access_token(access_token, access_token_secret)
-        tweepy.API(auth).update_status(message)
-    except tweepy.TweepyException as e:
-        log_error(e)
-        exit()
-
-
-
-def main():
-
+def main(event, context):
     jerk_chicken_dict = get_chicken_dict()
     menus = get_menus()
+    today = datetime.today().date()
 
-    chicken_meals = get_chicken_meals(jerk_chicken_dict, menus, datetime.today().date())
-    
-    msg = get_chicken_message(jerk_chicken_dict, chicken_meals)
+    chicken_meals = get_chicken_meals(jerk_chicken_dict, menus, today)
 
-    tweet("\n".join(msg))
+    tweet = get_tweet(jerk_chicken_dict, chicken_meals, today)
+    payload = {"text": f"{tweet}"}
 
-
-
-if __name__ == '__main__':
-    main()
+    url, auth = connect_to_oauth(API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET)
+    res = requests.post(auth=auth, url=url, json=payload)
+    if res.status_code != 200:
+        raise RuntimeError("failed to post tweet " + format_response(res))
