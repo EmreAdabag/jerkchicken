@@ -61,7 +61,7 @@ def get_tweet(jerk_chicken_dict, chicken_meals, the_date):
          ...
         """
 
-        msg = ["\N{Police Cars Revolving Light} Jerk chicken today (%s)\n" % (the_date)]
+        info = ["\N{Police Cars Revolving Light} Jerk chicken today (%s)\n" % (the_date)]
         for m in chicken_meals:
             location, meal = m
 
@@ -84,8 +84,17 @@ def get_tweet(jerk_chicken_dict, chicken_meals, the_date):
                     location_with_time = hall
                     break
 
-            msg.append(f" - {jerk_chicken_dict[meal]} at {location_with_time}")
+            info.append(f" - {jerk_chicken_dict[meal]} at {location_with_time}")
         
+        seen = set()
+        msg = []
+
+        # remove duplicates while maintaining order
+        for line in info:
+            if line not in seen:
+                seen.add(line)
+                msg.append(line)
+
         return "\n".join(msg)
 
 def main(event, context):
@@ -112,3 +121,6 @@ def main(event, context):
     )
     if res.status_code != 200:
         raise RuntimeError("failed to post tweet '%s': %s" % (tweet, res.text))
+
+if __name__ == "__main__":
+    main(None, None)
