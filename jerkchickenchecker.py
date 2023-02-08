@@ -119,7 +119,7 @@ def main(event, context):
         url=TWITTER_URL, 
         json=payload
     )
-    if res.status_code != 200:
+    if res.status_code != 201:
         raise RuntimeError("failed to post tweet '%s': %s" % (tweet, res.text))
 
 if __name__ == "__main__":
