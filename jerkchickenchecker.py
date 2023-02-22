@@ -45,6 +45,24 @@ def get_chicken_meals(jerk_chicken_dict, menus_json, target_date):
     return chicken_days
 
 def get_tweet(jerk_chicken_dict, chicken_meals, the_date):
+    def meal_of_day_to_num(meal_of_day):
+        if meal_of_day == "Breakfast":
+            return 0
+        elif meal_of_day == "Lunch":
+            return 1
+        else:
+            # Dinner
+            return 2
+
+    def num_to_meal_of_day(num):
+        if num == 0:
+            return "Breakfast"
+        elif num == 1:
+            return "Lunch"
+        else:
+            # 2
+            return "Dinner"
+
     the_date = "%d/%d/%d" % (the_date.month, the_date.day, the_date.year)
 
     if len(chicken_meals) == 0:
@@ -61,52 +79,77 @@ def get_tweet(jerk_chicken_dict, chicken_meals, the_date):
          ...
         """
 
-        info = ["\N{Police Cars Revolving Light} Jerk chicken today (%s)\n" % (the_date)]
+        msg = ["\N{Police Cars Revolving Light} Jerk chicken today (%s)\n" % (the_date)]
+
+        grouped_chicken_meals = {}
         for m in chicken_meals:
             location, meal = m
 
-            location_with_time = "a dining hall"  # default message
+            details = []
 
-            # dining halls with multiple meals a day
-            # gets both dining hall and meal of day
-            for hall in ["John Jay", "Ferris"]:
+            # Get dining hall
+            for hall in ["John Jay", "Ferris", "JJs", "Chef Don's", "Chef Mike's"]:
                 if hall in location:
-                    for meal_of_day in ["Breakfast", "Lunch", "Dinner"]:
-                        if meal_of_day in location:
-                            location_with_time = "%s for %s" % (hall, meal_of_day.lower())
-                            break
+                    details.append(hall)
                     break
 
-            # dining halls with one meal a day
-            # gets only dining hall
-            for hall in ["JJs", "Chef Don's", "Chef Mike's"]:
-                if hall in location:
-                    location_with_time = hall
-                    break
+            if len(details) != 1:
+                raise RuntimeError("error finding dining hall")
 
-            info.append(f" - {jerk_chicken_dict[meal]} at {location_with_time}")
+            # Some dining halls have multiple meals a day. With these, add the meal of day.
+            if details[0] in ["John Jay", "Ferris"]:
+                for meal_of_day in ["Breakfast", "Lunch", "Dinner"]:
+                    if meal_of_day in location:
+                        details.append(meal_of_day_to_num(meal_of_day))
+                        break
+                    
+                if len(details) != 2:
+                    raise RuntimeError("error finding meal of day")
+
+            details = tuple(details)
+            meal = jerk_chicken_dict[meal]
+            if details not in grouped_chicken_meals:
+                grouped_chicken_meals[details] = [meal]
+            elif meal not in grouped_chicken_meals[details]:
+                grouped_chicken_meals[details].append(meal)
+
+            # info.append(f" - {jerk_chicken_dict[meal]} at {location_with_time}")
         
-        seen = set()
-        msg = []
+        for meal_details in sorted(grouped_chicken_meals):
+            location = ""
+            if len(meal_details) == 1:
+                location = meal_details[0]
+            else:
+                # len(meal_details) == 2
+                location = "%s for %s" % (meal_details[0], num_to_meal_of_day(meal_details[1]))
 
-        # remove duplicates while maintaining order
-        for line in info:
-            if line not in seen:
-                seen.add(line)
-                msg.append(line)
+            # getting grammatically-correct comma list
+            meals = grouped_chicken_meals[meal_details]
+            meals = list(sorted(meals))
+            listed_meals = ""
+            if len(meals) == 1:
+                listed_meals = meals[0]
+            elif len(meals) == 2:
+                listed_meals = " and ".join(meals)
+            else:
+                # len(meals) > 2
+                listed_meals = "%s, and %s" % (", ".join(meals[:-1]), meals[-1])
+
+            line = "\N{Poultry Leg} %s at %s" % (listed_meals, location)
+            msg.append(line)
 
         return "\n".join(msg)
 
 def main(event, context):
     foods = requests.get(FOOD_URL)
     if foods.status_code != 200:
-        raise RuntimeError("error fetching food items: " + foods.text)
+        foods.raise_for_status()
 
     jerk_chicken_dict = get_chicken_dict(foods.json())
 
     menus = requests.get(MENU_URL)
     if menus.status_code != 200:
-        raise RuntimeError("error fetching menu: " + menus.text)
+        menus.raise_for_status()
 
     today = datetime.today().date()
     chicken_meals = get_chicken_meals(jerk_chicken_dict, menus.json(), today)
@@ -120,7 +163,4 @@ def main(event, context):
         json=payload
     )
     if res.status_code != 201:
-        raise RuntimeError("failed to post tweet '%s': %s" % (tweet, res.text))
-
-if __name__ == "__main__":
-    main(None, None)
+        res.raise_for_status()
