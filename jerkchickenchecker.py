@@ -1,29 +1,47 @@
-import os
 import requests
 import html
 from datetime import datetime
-from requests_oauthlib import OAuth1
+import tweepy
 
-API_KEY = os.environ["API_KEY"]
-API_SECRET = os.environ["API_SECRET"]
-ACCESS_TOKEN = os.environ["ACCESS_TOKEN"]
-ACCESS_SECRET = os.environ["ACCESS_SECRET"]
+from keys import api_key, api_secret, access_token, access_token_secret
 
 FOOD_URL = "https://dining.columbia.edu/cu_dining/rest/meals"
 MENU_URL = "https://dining.columbia.edu/cu_dining/rest/menus/nested"
-TWITTER_URL = "https://api.twitter.com/2/tweets"
 
-def get_chicken_dict(foods_json):
+
+def log_error(message):
+    with open("errorlog.txt", "a") as f:
+        f.write(f"{datetime.now().strftime('%m/%d/%Y, %H:%M:%S')} {message}\n\n")
+
+
+def get_chicken_dict() -> dict:
+    foods = requests.get(FOOD_URL)
+    if foods.status_code != 200:
+        log_error("error fetching chicken dict")
+        exit()
+
+    foods_json = foods.json()
     jerk_chicken_dict = {}
 
     for food in foods_json:
-        food_name = html.unescape(food["title"]).strip()
+        food_name = html.unescape(food["title"])
         if "jerk chicken" in food_name.lower():
             jerk_chicken_dict[food["nid"]] = food_name
 
     return jerk_chicken_dict
 
-def get_chicken_meals(jerk_chicken_dict, menus_json, target_date):
+
+def get_menus():
+    menus = requests.get(MENU_URL)
+    print(menus.status_code)
+    if menus.status_code != 200:
+        log_error("error fetching menu")
+        exit()
+
+    return menus.json()
+    
+
+def get_chicken_meals(jerk_chicken_dict: dict, menus_json: list, target_date):
     chicken_days = []
 
     for menu in menus_json:
@@ -44,130 +62,75 @@ def get_chicken_meals(jerk_chicken_dict, menus_json, target_date):
 
     return chicken_days
 
-def get_tweet(jerk_chicken_dict, chicken_meals, the_date):
-    def meal_of_day_to_num(meal_of_day):
-        if meal_of_day == "Breakfast":
-            return 0
-        elif meal_of_day == "Lunch":
-            return 1
-        else:
-            # Dinner
-            return 2
 
-    def num_to_meal_of_day(num):
-        if num == 0:
-            return "Breakfast"
-        elif num == 1:
-            return "Lunch"
-        else:
-            # 2
-            return "Dinner"
+def get_chicken_message(jerk_chicken_dict, chicken_meals):
 
-    the_date = "%d/%d/%d" % (the_date.month, the_date.day, the_date.year)
-
-    if not chicken_meals:
+    if len(chicken_meals) == 0:
         """
-        No jerk chicken today (2/6/23)
+        No jerk chicken today
         """
-        return '\N{white heavy check mark} No jerk chicken today (%s)' % (the_date)
+        msg = '\N{white heavy check mark} No jerk chicken today'
+
     else:
         """
-        Jerk chicken today (2/6/23)
+        Jerk chicken today!
 
          - Jerk Chicken at John Jay for lunch
          - Jerk Chicken Sub at Chef Mike's
          ...
         """
 
-        msg = ["\N{Police Cars Revolving Light} Jerk chicken today (%s)\n" % (the_date)]
-
-        grouped_chicken_meals = {}
+        msg = ["\N{Police Cars Revolving Light} Jerk chicken today!\n"]
         for m in chicken_meals:
             location, meal = m
 
-            details = []
+            location_with_time = "a dining hall"  # default message
 
-            # Get dining hall
-            for hall in ["John Jay", "Ferris", "JJs", "Chef Don's", "Chef Mike's"]:
+            # dining halls with multiple meals a day
+            # gets both dining hall and meal of day
+            for hall in ["John Jay", "Ferris"]:
                 if hall in location:
-                    details.append(hall)
+                    for meal_of_day in ["Breakfast", "Lunch", "Dinner"]:
+                        if meal_of_day in location:
+                            location_with_time = "%s for %s" % (hall, meal_of_day.lower())
+                            break
                     break
 
-            if len(details) != 1:
-                raise RuntimeError("error finding dining hall")
+            # dining halls with one meal a day
+            # gets only dining hall
+            for hall in ["JJs", "Chef Don's", "Chef Mike's"]:
+                if hall in location:
+                    location_with_time = hall
+                    break
 
-            # Some dining halls have multiple meals a day. With these, add the meal of day.
-            if details[0] in ["John Jay", "Ferris"]:
-                for meal_of_day in ["Breakfast", "Lunch", "Dinner"]:
-                    if meal_of_day in location:
-                        details.append(meal_of_day_to_num(meal_of_day))
-                        break
-                    
-                if len(details) != 2:
-                    raise RuntimeError("error finding meal of day")
-
-            details = tuple(details)
-            meal = jerk_chicken_dict[meal]
-            if details not in grouped_chicken_meals:
-                grouped_chicken_meals[details] = [meal]
-            elif meal not in grouped_chicken_meals[details]:
-                grouped_chicken_meals[details].append(meal)
-
-            # info.append(f" - {jerk_chicken_dict[meal]} at {location_with_time}")
+            msg.append(f" - {jerk_chicken_dict[meal]} at {location_with_time}")
         
-        curr_hall = None
-        for meal_details in sorted(grouped_chicken_meals):
-            location = ""
-            if len(meal_details) == 1:
-                location = meal_details[0]
-            else:
-                # len(meal_details) == 2
-                location = "%s for %s" % (meal_details[0], num_to_meal_of_day(meal_details[1]).lower())
+    return msg
 
-            # getting grammatically-correct comma list
-            meals = grouped_chicken_meals[meal_details]
-            meals = list(sorted(meals))
-            listed_meals = ""
-            if len(meals) == 1:
-                listed_meals = meals[0]
-            elif len(meals) == 2:
-                listed_meals = " and ".join(meals)
-            else:
-                # len(meals) > 2
-                listed_meals = "%s, and %s" % (", ".join(meals[:-1]), meals[-1])
 
-            line = "\N{Poultry Leg} %s at %s" % (listed_meals, location)
+def tweet(message: str):
+    try:
+        auth = tweepy.OAuthHandler(api_key, api_secret)
+        auth.set_access_token(access_token, access_token_secret)
+        tweepy.API(auth).update_status(message)
+    except tweepy.TweepyException as e:
+        log_error(e)
+        exit()
 
-            if curr_hall != meal_details[0]:
-                if curr_hall:
-                    line = "\n" + line
-                curr_hall = meal_details[0]
 
-            msg.append(line)
 
-        return "\n".join(msg)
+def main():
 
-def main(event, context):
-    foods = requests.get(FOOD_URL)
-    if foods.status_code != 200:
-        foods.raise_for_status()
+    jerk_chicken_dict = get_chicken_dict()
+    menus = get_menus()
 
-    jerk_chicken_dict = get_chicken_dict(foods.json())
+    chicken_meals = get_chicken_meals(jerk_chicken_dict, menus, datetime.today().date())
+    
+    msg = get_chicken_message(jerk_chicken_dict, chicken_meals)
 
-    menus = requests.get(MENU_URL)
-    if menus.status_code != 200:
-        menus.raise_for_status()
+    tweet("\n".join(msg))
 
-    today = datetime.today().date()
-    chicken_meals = get_chicken_meals(jerk_chicken_dict, menus.json(), today)
 
-    tweet = get_tweet(jerk_chicken_dict, chicken_meals, today)
-    payload = {"text": tweet}
 
-    res = requests.post(
-        auth=OAuth1(API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET), 
-        url=TWITTER_URL, 
-        json=payload
-    )
-    if res.status_code != 201:
-        res.raise_for_status()
+if __name__ == '__main__':
+    main()
