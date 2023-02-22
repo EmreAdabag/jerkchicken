@@ -1,4 +1,5 @@
-keys.py
-__pycache__
-.idea/
-errorlog.txt
+*
+!.gitignore
+!jerkchickenchecker.py
+!README.md
+!requirements.txt
