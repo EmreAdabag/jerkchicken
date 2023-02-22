@@ -65,7 +65,7 @@ def get_tweet(jerk_chicken_dict, chicken_meals, the_date):
 
     the_date = "%d/%d/%d" % (the_date.month, the_date.day, the_date.year)
 
-    if len(chicken_meals) == 0:
+    if not chicken_meals:
         """
         No jerk chicken today (2/6/23)
         """
@@ -115,6 +115,7 @@ def get_tweet(jerk_chicken_dict, chicken_meals, the_date):
 
             # info.append(f" - {jerk_chicken_dict[meal]} at {location_with_time}")
         
+        curr_hall = None
         for meal_details in sorted(grouped_chicken_meals):
             location = ""
             if len(meal_details) == 1:
@@ -136,6 +137,12 @@ def get_tweet(jerk_chicken_dict, chicken_meals, the_date):
                 listed_meals = "%s, and %s" % (", ".join(meals[:-1]), meals[-1])
 
             line = "\N{Poultry Leg} %s at %s" % (listed_meals, location)
+
+            if curr_hall != meal_details[0]:
+                if curr_hall:
+                    line = "\n" + line
+                curr_hall = meal_details[0]
+
             msg.append(line)
 
         return "\n".join(msg)
