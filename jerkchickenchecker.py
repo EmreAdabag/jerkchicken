@@ -17,7 +17,7 @@ def get_chicken_dict(foods_json):
     jerk_chicken_dict = {}
 
     for food in foods_json:
-        food_name = html.unescape(food["title"])
+        food_name = html.unescape(food["title"]).strip()
         if "jerk chicken" in food_name.lower():
             jerk_chicken_dict[food["nid"]] = food_name
 
@@ -121,7 +121,7 @@ def get_tweet(jerk_chicken_dict, chicken_meals, the_date):
                 location = meal_details[0]
             else:
                 # len(meal_details) == 2
-                location = "%s for %s" % (meal_details[0], num_to_meal_of_day(meal_details[1]))
+                location = "%s for %s" % (meal_details[0], num_to_meal_of_day(meal_details[1]).lower())
 
             # getting grammatically-correct comma list
             meals = grouped_chicken_meals[meal_details]
