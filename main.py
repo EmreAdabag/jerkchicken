@@ -1,106 +1,77 @@
-from datetime import date, datetime, timedelta
+from datetime import datetime
 import os
-import requests
+from typing import Optional
 
 from bs4 import BeautifulSoup, Tag
+import requests
 from requests_oauthlib import OAuth1
 
 from models import Keyword, JerkChickenMeal, Setting, JerkChickenEntry
 
-API_KEY = os.environ["API_KEY"]
-API_SECRET = os.environ["API_SECRET"]
-ACCESS_TOKEN = os.environ["ACCESS_TOKEN"]
-ACCESS_SECRET = os.environ["ACCESS_SECRET"]
+# API_KEY = os.environ["API_KEY"]
+# API_SECRET = os.environ["API_SECRET"]
+# ACCESS_TOKEN = os.environ["ACCESS_TOKEN"]
+# ACCESS_SECRET = os.environ["ACCESS_SECRET"]
 
 BASE_URL = "https://dining.columbia.edu"
-KEYWORDS_URL = "https://dining.columbia.edu/json/keywords"
+KEYWORDS_URL = "https://dining.columbia.edu/json/keywords?_format=json"
 TWITTER_URL = "https://api.twitter.com/2/tweets"
 
 THE_WORST = "jerk chicken"
-DINING_HALLS = ["Grace Dodge", "Faculty House", "Fac Shack", "Ferris", "JJ's", "Chef Don's", "Chef Mike's", "John Jay"]
+# DINING_HALLS = ["Grace Dodge", "Faculty House", "Fac Shack", "Ferris", "JJ's", "Chef Don's", "Chef Mike's", "John Jay"]
+DINING_HALLS = ["Ferris", "John Jay"]
+# ["ferris", "john-jay"], i.e., what would show up in a path
+DINING_HALL_PATHS = [dh.lower().replace(" ", "-") for dh in DINING_HALLS]
 
-def _hook_keyword(obj):
-    try:
-        return Keyword(**obj)
-    except TypeError:
-        return obj
-
-def get_menu_keywords() -> list[Keyword]:
-    raw_keywords = requests.get(KEYWORDS_URL)
-    if raw_keywords.status_code != 200:
-        raw_keywords.raise_for_status()
-    keywords: list[Keyword] = raw_keywords.json(object_hook=_hook_keyword)
+def get_dining_menus(keywords) -> list[Keyword]:
+    """
+    Given a JSON of Dining API keywords, converts them to a list of Keyword objects
+    and keeps only those whose type is cu_dining_menu.
+    """
+    keywords = [Keyword(**kw) for kw in keywords]
     return [kw for kw in keywords if kw.type == "cu_dining_menu"]
 
-def get_menu_hall(menu_keyword: Keyword) -> str | None:
-    for hall in DINING_HALLS:
-        if hall.lower() in menu_keyword.title.lower():
-            return hall
-    return None
-
-def filter_dining_halls(menu_keywords: list[Keyword]) -> list[Keyword]:
-    return [kw for kw in menu_keywords if get_menu_hall(kw) is not None]
-
-def get_page_html(path: str) -> BeautifulSoup:
-    print(BASE_URL + path)
-    res = requests.get(BASE_URL + path)
-    if res.status_code != 200:
-        res.raise_for_status()
-    return BeautifulSoup(res.text, "html.parser")
-
-def get_menu_date_ranges(soup: BeautifulSoup) -> list[Tag]:
-    return soup.find_all(class_="paragraph--type--cu-dining-date-range")
-
-def is_menu_date_in_range(soup: BeautifulSoup, target_date: date) -> bool:
-    menu_date_range = get_menu_date_ranges(soup)[0]
-    get_date = lambda tag: datetime.strptime(tag.find("time").get("datetime"), "%Y-%m-%dT%H:%M:%SZ").date()
-    menu_start_date: date = get_date(menu_date_range.find(class_="field--name-field-cu-dining-date-from"))
-    menu_end_date: date = get_date(menu_date_range.find(class_="field--name-field-cu-dining-date-to"))
-    return menu_start_date == target_date and (menu_end_date == target_date or menu_end_date == target_date + timedelta(days=1))
-
-def get_offending_meals_for_date_range(date_range: Tag) -> list[JerkChickenMeal]:
-    res: list[JerkChickenMeal] = []
-    meal_infos: list[Tag] = date_range.find_all("paragraph--type--cu-dining-meal")
-    for meal_info in meal_infos:
-        meal_name = meal_info.find(class_="field--name-field-cu-title").find(class_="field--item").get_text().strip()
-        if THE_WORST in meal_name.lower():
-            res.append(JerkChickenMeal(meal_name, True))
-        elif (meal_desc_tag := meal_info.find(class_="field--name-field-cu-dining-meal-text")) is not None:
-            meal_desc = meal_desc_tag.find(class_="field--item").get_text()
-            if THE_WORST in meal_desc.lower():
-                res.append(JerkChickenMeal(meal_name, False))
+def get_date_combos(date) -> list[str]:
+    """
+    If today is 02-03-24, returns ["2-3-24", "2-03-24", "02-3-24", "02-03-24"]
+    (order not important). The Dining API uses these date formats interchangeably
+    in their path names.
+    """
+    month, day, year = date.month, date.day, date.year
+    month, day, year = str(month), str(day), str(year)[-2:]
+    res = []
+    for m in [month, f"{month:0>2}"]:
+        for d in [day, f"{day:0>2}"]:
+            res.append(f"{m}-{d}-{year}")
     return res
 
-def get_menu_meal_of_day(date_range: Tag) -> str:
-    return date_range.find(class_="field--name-field-cu-dining-menu-type").find("a").get_text()
+def get_menus_for_date_and_halls(menus: list[Keyword], date) -> list[Keyword]:
+    """
+    Given a list of menus (represented as Keywords), keeps only those whose
+    date matches what is specified and dining hall exists in DINING_HALLS.
 
-def get_offending_meals(menu_keywords: list[Keyword], target_date: date) -> list[JerkChickenEntry]:
-    res: list[JerkChickenEntry] = []
-    visited_halls: set[str] = set()
-    for kw in menu_keywords:
-        hall = get_menu_hall(kw)
-        assert hall is not None
-        print(f"{hall=} {visited_halls=}")
-        if hall in visited_halls:
-            print("Skipping")
-            continue
-        soup = get_page_html(kw.path)
-        if not is_menu_date_in_range(soup, target_date):
-            continue
+    The date and dining hall are checked by looking at the keyword's path.
+    """
+    date_combos = get_date_combos(date)
 
-        menu_date_ranges = get_menu_date_ranges(soup)
-        for date_range in menu_date_ranges:
-            offending_meals_for_date_range = get_offending_meals_for_date_range(date_range)
-            if offending_meals_for_date_range:
-                menu_meal_of_day = get_menu_meal_of_day(date_range)
-                menu_setting = Setting(hall, menu_meal_of_day)
-                res.append(JerkChickenEntry(offending_meals_for_date_range, menu_setting))
-            
-        visited_halls.add(hall)
+    menus_for_date = []
+    # Filter dates
+    for menu in menus:
+        for date in date_combos:
+            if date in menu.path:
+                menus_for_date.append(menu)
+                break
 
-    return res
+    menus_for_date_and_halls = []
+    for menu in menus_for_date:
+        for dh in DINING_HALL_PATHS:
+            if dh in menu.path:
+                menus_for_date_and_halls.append(menu)
+                break
 
-def get_tweet(offending_meals: list[JerkChickenEntry], target_date: date):
+    return menus_for_date_and_halls
+
+def get_tweet(offending_meals: list[JerkChickenEntry], target_date):
     the_date = "%d/%d/%d" % (target_date.month, target_date.day, target_date.year)
 
     if not offending_meals:
@@ -136,12 +107,17 @@ def get_tweet(offending_meals: list[JerkChickenEntry], target_date: date):
     return "\n".join(msg)
 
 def main(event, context):
-    menu_keywords = get_menu_keywords()
-    dining_hall_menus = filter_dining_halls(menu_keywords)
-    
+    raw_keywords = requests.get(KEYWORDS_URL)
+    if raw_keywords.status_code != 200:
+        raw_keywords.raise_for_status()
+    dining_menus = get_dining_menus(raw_keywords.json())
+
     today = datetime.today().date()
-    offending_meals = get_offending_meals(dining_hall_menus, today)
-    tweet = get_tweet(offending_meals, today)
+    today_menus = get_menus_for_date_and_halls(dining_menus, today)
+    assert len(today_menus) <= len(DINING_HALLS)
+
+"""
+    tweet = "Hello Columbia"
 
     res = requests.post(
         auth=OAuth1(API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET), 
@@ -150,3 +126,4 @@ def main(event, context):
     )
     if res.status_code != 201:
         res.raise_for_status()
+"""
