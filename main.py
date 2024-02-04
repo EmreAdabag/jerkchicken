@@ -1,12 +1,12 @@
 from datetime import datetime
 import os
 from typing import Optional
-
+import re
 from bs4 import BeautifulSoup, Tag
 import requests
 from requests_oauthlib import OAuth1
 
-from models import Keyword, JerkChickenMeal, Setting, JerkChickenEntry
+from models import Keyword, JerkChickenMeal
 
 # API_KEY = os.environ["API_KEY"]
 # API_SECRET = os.environ["API_SECRET"]
@@ -22,6 +22,30 @@ THE_WORST = "jerk chicken"
 DINING_HALLS = ["Ferris", "John Jay"]
 # ["ferris", "john-jay"], i.e., what would show up in a path
 DINING_HALL_PATHS = [dh.lower().replace(" ", "-") for dh in DINING_HALLS]
+
+
+# Given path, return if theres Jerk Chicken and what meal
+
+def is_jerk_chicken(path) -> list[JerkChickenMeal]:
+    """
+    Given a path, return list of offending meals as JerkChickenMeal objects
+    """
+    pattern = r'jerk ?chicken'
+    response = requests.get(BASE_URL + path)
+    soup = BeautifulSoup(response.text, 'lxml')
+    offending_meals = []
+    
+    matches = soup.find_all('div', class_='paragraph paragraph--type--cu-dining-date-range paragraph--view-mode--default anchored')
+    for meal in matches:
+        meal_of_day = meal.find('div', class_='field field--name-field-cu-dining-menu-type field--type-entity-reference field--label-above').find('div', class_="field--item").text
+        sections = meal.find_all('div', class_='accordion field field--name-field-cu-title field--type-string field--label-above')
+        for section in sections:
+            no_whitespace = ''.join(str(section.text).split('\n')).replace('Title', '')
+            if bool(re.search(pattern, no_whitespace, re.IGNORECASE)):
+                offending_meals.append(JerkChickenMeal(meal_name=no_whitespace, meal_of_day=meal_of_day))
+ 
+    return offending_meals
+            
 
 def get_dining_menus(keywords) -> list[Keyword]:
     """
@@ -71,40 +95,40 @@ def get_menus_for_date_and_halls(menus: list[Keyword], date) -> list[Keyword]:
 
     return menus_for_date_and_halls
 
-def get_tweet(offending_meals: list[JerkChickenEntry], target_date):
-    the_date = "%d/%d/%d" % (target_date.month, target_date.day, target_date.year)
+# def get_tweet(offending_meals: list[JerkChickenEntry], target_date):
+#     the_date = "%d/%d/%d" % (target_date.month, target_date.day, target_date.year)
 
-    if not offending_meals:
-        """
-        No jerk chicken today (2/6/23)
-        """
-        return '\N{white heavy check mark} No jerk chicken today (%s)' % (the_date)
+#     if not offending_meals:
+#         """
+#         No jerk chicken today (2/6/23)
+#         """
+#         return '\N{white heavy check mark} No jerk chicken today (%s)' % (the_date)
     
-    """
-    Jerk chicken today (2/6/23)
+#     """
+#     Jerk chicken today (2/6/23)
 
-        - Jerk Chicken at John Jay for lunch
-        - Jerk Chicken Sub at Chef Mike's
-        ...
-    """
+#         - Jerk Chicken at John Jay for lunch
+#         - Jerk Chicken Sub at Chef Mike's
+#         ...
+#     """
 
-    msg = ["\N{Police Cars Revolving Light} Jerk chicken today (%s)\n" % (the_date)]
+#     msg = ["\N{Police Cars Revolving Light} Jerk chicken today (%s)\n" % (the_date)]
 
-    for entry in offending_meals:
-        meal_names = [m.food_name for m in entry.meals]
-        listed_meals: str = ""
-        if len(meal_names) == 1:
-            listed_meals = meal_names[0]
-        elif len(meal_names) == 2:
-            listed_meals = " and ".join(meal_names)
-        else:
-            # len(meal_names) > 2
-            listed_meals = "%s, and %s" % (", ".join(meal_names[:-1]), meal_names[-1])
+#     for entry in offending_meals:
+#         meal_names = [m.food_name for m in entry.meals]
+#         listed_meals: str = ""
+#         if len(meal_names) == 1:
+#             listed_meals = meal_names[0]
+#         elif len(meal_names) == 2:
+#             listed_meals = " and ".join(meal_names)
+#         else:
+#             # len(meal_names) > 2
+#             listed_meals = "%s, and %s" % (", ".join(meal_names[:-1]), meal_names[-1])
 
-        line = "\N{Poultry Leg} %s at %s for %s" % (listed_meals, entry.setting.dining_hall, entry.setting.meal_of_day)
-        msg.append(line)
+#         line = "\N{Poultry Leg} %s at %s for %s" % (listed_meals, entry.setting.dining_hall, entry.setting.meal_of_day)
+#         msg.append(line)
 
-    return "\n".join(msg)
+#     return "\n".join(msg)
 
 def main(event, context):
     raw_keywords = requests.get(KEYWORDS_URL)
@@ -115,6 +139,8 @@ def main(event, context):
     today = datetime.today().date()
     today_menus = get_menus_for_date_and_halls(dining_menus, today)
     assert len(today_menus) <= len(DINING_HALLS)
+
+    print(today_menus)
 
 """
     tweet = "Hello Columbia"
@@ -127,3 +153,6 @@ def main(event, context):
     if res.status_code != 201:
         res.raise_for_status()
 """
+
+# main(None, None)
+print(is_jerk_chicken('/content/spring-ferris-week-3-saturday-02-03-24'))
