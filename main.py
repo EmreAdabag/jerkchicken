@@ -1,12 +1,10 @@
 from datetime import datetime
-import os
-from typing import Optional
 import re
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
 import requests
 from requests_oauthlib import OAuth1
 
-from models import Keyword, JerkChickenMeal
+from models import *
 
 # API_KEY = os.environ["API_KEY"]
 # API_SECRET = os.environ["API_SECRET"]
@@ -17,7 +15,7 @@ BASE_URL = "https://dining.columbia.edu"
 KEYWORDS_URL = "https://dining.columbia.edu/json/keywords?_format=json"
 TWITTER_URL = "https://api.twitter.com/2/tweets"
 
-THE_WORST = "jerk chicken"
+THE_WORST = r'jerk ?chicken'
 # DINING_HALLS = ["Grace Dodge", "Faculty House", "Fac Shack", "Ferris", "JJ's", "Chef Don's", "Chef Mike's", "John Jay"]
 DINING_HALLS = ["Ferris", "John Jay"]
 # ["ferris", "john-jay"], i.e., what would show up in a path
@@ -26,13 +24,12 @@ DINING_HALL_PATHS = [dh.lower().replace(" ", "-") for dh in DINING_HALLS]
 
 # Given path, return if theres Jerk Chicken and what meal
 
-def is_jerk_chicken(path) -> list[JerkChickenMeal]:
+def get_offending_meals(text) -> list[JerkChickenMeal]:
     """
-    Given a path, return list of offending meals as JerkChickenMeal objects
+    Given HTML text, return list of offending meals as JerkChickenMeal objects
     """
-    pattern = r'jerk ?chicken'
-    response = requests.get(BASE_URL + path)
-    soup = BeautifulSoup(response.text, 'lxml')
+    # response = requests.get(BASE_URL + path)
+    soup = BeautifulSoup(text, 'lxml')
     offending_meals = []
     
     matches = soup.find_all('div', class_='paragraph paragraph--type--cu-dining-date-range paragraph--view-mode--default anchored')
@@ -41,11 +38,10 @@ def is_jerk_chicken(path) -> list[JerkChickenMeal]:
         sections = meal.find_all('div', class_='accordion field field--name-field-cu-title field--type-string field--label-above')
         for section in sections:
             no_whitespace = ''.join(str(section.text).split('\n')).replace('Title', '')
-            if bool(re.search(pattern, no_whitespace, re.IGNORECASE)):
+            if bool(re.search(THE_WORST, no_whitespace, re.IGNORECASE)):
                 offending_meals.append(JerkChickenMeal(meal_name=no_whitespace, meal_of_day=meal_of_day))
  
     return offending_meals
-            
 
 def get_dining_menus(keywords) -> list[Keyword]:
     """
@@ -69,7 +65,7 @@ def get_date_combos(date) -> list[str]:
             res.append(f"{m}-{d}-{year}")
     return res
 
-def get_menus_for_date_and_halls(menus: list[Keyword], date) -> list[Keyword]:
+def get_menus_for_date_and_halls(menus: list[Keyword], date) -> list[Menu]:
     """
     Given a list of menus (represented as Keywords), keeps only those whose
     date matches what is specified and dining hall exists in DINING_HALLS.
@@ -87,10 +83,11 @@ def get_menus_for_date_and_halls(menus: list[Keyword], date) -> list[Keyword]:
                 break
 
     menus_for_date_and_halls = []
+    # Filter dining halls
     for menu in menus_for_date:
-        for dh in DINING_HALL_PATHS:
-            if dh in menu.path:
-                menus_for_date_and_halls.append(menu)
+        for dh, dh_path in zip(DINING_HALLS, DINING_HALL_PATHS):
+            if dh_path in menu.path:
+                menus_for_date_and_halls.append(Menu(dining_hall=dh, path=menu.path))
                 break
 
     return menus_for_date_and_halls
@@ -131,16 +128,25 @@ def get_menus_for_date_and_halls(menus: list[Keyword], date) -> list[Keyword]:
 #     return "\n".join(msg)
 
 def main(event, context):
-    raw_keywords = requests.get(KEYWORDS_URL)
-    if raw_keywords.status_code != 200:
-        raw_keywords.raise_for_status()
-    dining_menus = get_dining_menus(raw_keywords.json())
+    keywords = requests.get(KEYWORDS_URL)
+    if keywords.status_code != 200:
+        keywords.raise_for_status()
+    dining_menus = get_dining_menus(keywords.json())
 
     today = datetime.today().date()
     today_menus = get_menus_for_date_and_halls(dining_menus, today)
     assert len(today_menus) <= len(DINING_HALLS)
 
-    print(today_menus)
+    offending_meal_entries = []
+    for menu in today_menus:
+        menu_page = requests.get(BASE_URL + menu.path)
+        if menu_page.status_code != 200:
+            menu_page.raise_for_status()
+        offending_meals = get_offending_meals(menu_page.text)
+        if offending_meals:
+            offending_meal_entries.append(JerkChickenEntry(dining_hall=menu.dining_hall, meal=offending_meals))
+
+    print(offending_meal_entries)
 
 """
     tweet = "Hello Columbia"
@@ -154,5 +160,4 @@ def main(event, context):
         res.raise_for_status()
 """
 
-# main(None, None)
-print(is_jerk_chicken('/content/spring-ferris-week-3-saturday-02-03-24'))
+main(None, None)
