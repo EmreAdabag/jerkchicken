@@ -17,14 +17,11 @@ BASE_URL = "https://dining.columbia.edu"
 KEYWORDS_URL = "https://dining.columbia.edu/json/keywords?_format=json"
 TWITTER_URL = "https://api.twitter.com/2/tweets"
 
-THE_WORST = r'jerk ?chicken'
+THE_WORST = r'jerk chicken'
 # DINING_HALLS = ["Grace Dodge", "Faculty House", "Fac Shack", "Ferris", "JJ's", "Chef Don's", "Chef Mike's", "John Jay"]
 DINING_HALLS = ["Ferris", "John Jay"]
 # ["ferris", "john-jay"], i.e., what would show up in a path
 DINING_HALL_PATHS = [dh.lower().replace(" ", "-") for dh in DINING_HALLS]
-
-
-# Given path, return if theres Jerk Chicken and what meal
 
 def get_offending_meals(text) -> list[JerkChickenMeal]:
     """
@@ -98,10 +95,10 @@ def join_into_comma_list(words: list[str]):
     assert words
     if len(words) == 1:
         return words[0]
-    elif len(meal_names) == 2:
+    elif len(words) == 2:
         return " and ".join(words)
     else:
-        # len(meal_names) > 2
+        # len(words) > 2
         return "%s, and %s" % (", ".join(words[:-1]), words[-1])
 
 def construct_tweet(offending_meals: list[JerkChickenEntry], date):
