@@ -34,12 +34,12 @@ def get_offending_meals(text) -> list[JerkChickenMeal]:
     
     matches = soup.find_all('div', class_='paragraph paragraph--type--cu-dining-date-range paragraph--view-mode--default anchored')
     for meal in matches:
-        meal_of_day = meal.find('div', class_='field field--name-field-cu-dining-menu-type field--type-entity-reference field--label-above').find('div', class_="field--item").text
+        time_of_day = meal.find('div', class_='field field--name-field-cu-dining-menu-type field--type-entity-reference field--label-above').find('div', class_="field--item").text
         sections = meal.find_all('div', class_='accordion field field--name-field-cu-title field--type-string field--label-above')
         for section in sections:
             no_whitespace = ''.join(str(section.text).split('\n')).replace('Title', '')
             if bool(re.search(THE_WORST, no_whitespace, re.IGNORECASE)):
-                offending_meals.append(JerkChickenMeal(meal_name=no_whitespace, meal_of_day=meal_of_day))
+                offending_meals.append(JerkChickenMeal(meal_name=no_whitespace, time_of_day=time_of_day))
  
     return offending_meals
 
@@ -92,40 +92,44 @@ def get_menus_for_date_and_halls(menus: list[Keyword], date) -> list[Menu]:
 
     return menus_for_date_and_halls
 
-# def get_tweet(offending_meals: list[JerkChickenEntry], target_date):
-#     the_date = "%d/%d/%d" % (target_date.month, target_date.day, target_date.year)
+def join_into_comma_list(words: list[str]):
+    assert words
+    if len(words) == 1:
+        return words[0]
+    elif len(meal_names) == 2:
+        return " and ".join(words)
+    else:
+        # len(meal_names) > 2
+        return "%s, and %s" % (", ".join(words[:-1]), words[-1])
 
-#     if not offending_meals:
-#         """
-#         No jerk chicken today (2/6/23)
-#         """
-#         return '\N{white heavy check mark} No jerk chicken today (%s)' % (the_date)
+def construct_tweet(offending_meals: list[JerkChickenEntry], date):
+    the_date = "%d/%d/%d" % (date.month, date.day, date.year)
+
+    if not offending_meals:
+        """
+        No jerk chicken today (2/6/23)
+        """
+        return '\N{white heavy check mark} No jerk chicken today (%s)' % (the_date)
     
-#     """
-#     Jerk chicken today (2/6/23)
+    """
+    Jerk chicken today (2/6/23)
 
-#         - Jerk Chicken at John Jay for lunch
-#         - Jerk Chicken Sub at Chef Mike's
-#         ...
-#     """
+        - Jerk Chicken at John Jay for lunch
+        - Jerk Chicken Sub at Chef Mike's
+        ...
+    """
 
-#     msg = ["\N{Police Cars Revolving Light} Jerk chicken today (%s)\n" % (the_date)]
+    msg = ["\N{Police Cars Revolving Light} Jerk chicken today (%s)\n" % (the_date)]
 
-#     for entry in offending_meals:
-#         meal_names = [m.food_name for m in entry.meals]
-#         listed_meals: str = ""
-#         if len(meal_names) == 1:
-#             listed_meals = meal_names[0]
-#         elif len(meal_names) == 2:
-#             listed_meals = " and ".join(meal_names)
-#         else:
-#             # len(meal_names) > 2
-#             listed_meals = "%s, and %s" % (", ".join(meal_names[:-1]), meal_names[-1])
+    for entry in offending_meals:
+        for time_of_day in ["Breakfast", "Lunch", "Dinner"]:
+            meals_at_time = [m.meal_name for m in entry.meals if m.time_of_day == time_of_day]
+            if meals_at_time:
+                meals_comma_list = join_into_comma_list(meals_at_time)
+                line = "\N{Poultry Leg} %s at %s for %s" % (meals_comma_list, entry.dining_hall, time_of_day)
+                msg.append(line)
 
-#         line = "\N{Poultry Leg} %s at %s for %s" % (listed_meals, entry.setting.dining_hall, entry.setting.meal_of_day)
-#         msg.append(line)
-
-#     return "\n".join(msg)
+    return "\n".join(msg)
 
 def main(event, context):
     keywords = requests.get(KEYWORDS_URL)
@@ -144,13 +148,11 @@ def main(event, context):
             menu_page.raise_for_status()
         offending_meals = get_offending_meals(menu_page.text)
         if offending_meals:
-            offending_meal_entries.append(JerkChickenEntry(dining_hall=menu.dining_hall, meal=offending_meals))
+            offending_meal_entries.append(JerkChickenEntry(dining_hall=menu.dining_hall, meals=offending_meals))
 
-    print(offending_meal_entries)
-
+    tweet = construct_tweet(offending_meal_entries, today)
+    print(tweet)
 """
-    tweet = "Hello Columbia"
-
     res = requests.post(
         auth=OAuth1(API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET), 
         url="https://api.twitter.com/2/tweets", 

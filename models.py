@@ -15,9 +15,9 @@ class Menu:
 @dataclass(slots=True)
 class JerkChickenMeal:
     meal_name: str
-    meal_of_day: str  # Breakfast, Lunch, or Dinner
+    time_of_day: str  # Breakfast, Lunch, or Dinner
 
 @dataclass(slots=True)
 class JerkChickenEntry:
     dining_hall: str
-    meal: list[JerkChickenMeal]
+    meals: list[JerkChickenMeal]
