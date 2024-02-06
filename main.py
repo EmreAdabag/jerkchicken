@@ -1,15 +1,17 @@
 from datetime import datetime
+import os
 import re
+
 from bs4 import BeautifulSoup
 import requests
 from requests_oauthlib import OAuth1
 
 from models import *
 
-# API_KEY = os.environ["API_KEY"]
-# API_SECRET = os.environ["API_SECRET"]
-# ACCESS_TOKEN = os.environ["ACCESS_TOKEN"]
-# ACCESS_SECRET = os.environ["ACCESS_SECRET"]
+API_KEY = os.environ["API_KEY"]
+API_SECRET = os.environ["API_SECRET"]
+ACCESS_TOKEN = os.environ["ACCESS_TOKEN"]
+ACCESS_SECRET = os.environ["ACCESS_SECRET"]
 
 BASE_URL = "https://dining.columbia.edu"
 KEYWORDS_URL = "https://dining.columbia.edu/json/keywords?_format=json"
@@ -151,8 +153,6 @@ def main(event, context):
             offending_meal_entries.append(JerkChickenEntry(dining_hall=menu.dining_hall, meals=offending_meals))
 
     tweet = construct_tweet(offending_meal_entries, today)
-    print(tweet)
-"""
     res = requests.post(
         auth=OAuth1(API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET), 
         url="https://api.twitter.com/2/tweets", 
@@ -160,6 +160,6 @@ def main(event, context):
     )
     if res.status_code != 201:
         res.raise_for_status()
-"""
 
-main(None, None)
+if __name__ == "__main__":
+    main(None, None)
