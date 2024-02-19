@@ -19,15 +19,21 @@ TWITTER_URL = "https://api.twitter.com/2/tweets"
 
 THE_WORST = r'jerk chicken'
 # DINING_HALLS = ["Grace Dodge", "Faculty House", "Fac Shack", "Ferris", "JJ's", "Chef Don's", "Chef Mike's", "John Jay"]
-DINING_HALLS = ["Ferris", "John Jay"]
-# ["ferris", "john-jay"], i.e., what would show up in a path
-DINING_HALL_PATHS = [dh.lower().replace(" ", "-") for dh in DINING_HALLS]
+DINING_HALLS = ["Ferris", "John Jay", "JJ's"]
+# ["ferris", "john-jay", ...], i.e., what would show up in a path
+DINING_HALL_PATHS = ["ferris", "john-jay", "jjs"]
+assert len(DINING_HALLS) == len(DINING_HALL_PATHS)
+
+def find_meal_with_matching_time_of_day(meals, time_of_day):
+    for meal in meals:
+        if meal.time_of_day == time_of_day:
+            return meal
+    return None
 
 def get_offending_meals(text) -> list[JerkChickenMeal]:
     """
     Given HTML text, return list of offending meals as JerkChickenMeal objects
     """
-    # response = requests.get(BASE_URL + path)
     soup = BeautifulSoup(text, 'lxml')
     offending_meals = []
     
@@ -38,7 +44,11 @@ def get_offending_meals(text) -> list[JerkChickenMeal]:
         for section in sections:
             no_whitespace = ''.join(str(section.text).split('\n')).replace('Title', '')
             if bool(re.search(THE_WORST, no_whitespace, re.IGNORECASE)):
-                offending_meals.append(JerkChickenMeal(meal_name=no_whitespace, time_of_day=time_of_day))
+                meal_for_time_of_day = find_meal_with_matching_time_of_day(offending_meals, time_of_day)
+                if meal_for_time_of_day is not None:
+                    meal_for_time_of_day.food_names.append(no_whitespace)
+                else:
+                    offending_meals.append(JerkChickenMeal(food_names=[no_whitespace], time_of_day=time_of_day))
  
     return offending_meals
 
@@ -99,34 +109,34 @@ def join_into_comma_list(words: list[str]):
         return " and ".join(words)
     else:
         # len(words) > 2
-        return "%s, and %s" % (", ".join(words[:-1]), words[-1])
+        return f"{', '.join(words[:-1])}, and {words[-1]}"
 
 def construct_tweet(offending_meals: list[JerkChickenEntry], date):
-    the_date = "%d/%d/%d" % (date.month, date.day, date.year)
+    the_date = date.strftime("%b %d, %Y")
 
     if not offending_meals:
         """
-        No jerk chicken today (2/6/23)
+        ✅ No jerk chicken today (Feb 6, 2023)
         """
-        return '\N{white heavy check mark} No jerk chicken today (%s)' % (the_date)
+        return f"\N{white heavy check mark} No jerk chicken today ({the_date})"
     
     """
-    Jerk chicken today (2/6/23)
+    🚨 Jerk chicken today (Feb 6, 2023)
 
-        - Jerk Chicken at John Jay for lunch
-        - Jerk Chicken Sub at Chef Mike's
-        ...
+    At John Jay:
+    🍗 Jerk Chicken for lunch
+    🍗 Jerk Chicken and Jerk Chicken Wrap for dinner
+    ...
     """
 
-    msg = ["\N{Police Cars Revolving Light} Jerk chicken today (%s)\n" % (the_date)]
+    msg = [f"\N{Police Cars Revolving Light} Jerk chicken today ({the_date})\n"]
 
     for entry in offending_meals:
-        for time_of_day in ["Breakfast", "Lunch", "Dinner"]:
-            meals_at_time = [m.meal_name for m in entry.meals if m.time_of_day == time_of_day]
-            if meals_at_time:
-                meals_comma_list = join_into_comma_list(meals_at_time)
-                line = "\N{Poultry Leg} %s at %s for %s" % (meals_comma_list, entry.dining_hall, time_of_day)
-                msg.append(line)
+        msg.append(f"At {entry.dining_hall}:")
+        for meal in entry.meals:
+            meals_comma_list = join_into_comma_list(meal.food_names)
+            line = (f"\N{Poultry Leg} {meals_comma_list} for {meal.time_of_day.lower()}")
+            msg.append(line)
 
     return "\n".join(msg)
 
@@ -151,8 +161,8 @@ def main(event, context):
 
     tweet = construct_tweet(offending_meal_entries, today)
     res = requests.post(
-        auth=OAuth1(API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET), 
-        url="https://api.twitter.com/2/tweets", 
+        auth=OAuth1(API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET),
+        url=TWITTER_URL,
         json={"text": tweet}
     )
     if res.status_code != 201:
