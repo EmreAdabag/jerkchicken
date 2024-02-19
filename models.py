@@ -14,8 +14,8 @@ class Menu:
 
 @dataclass(slots=True)
 class JerkChickenMeal:
-    meal_name: str
-    time_of_day: str  # Breakfast, Lunch, or Dinner
+    food_names: [str]
+    time_of_day: str
 
 @dataclass(slots=True)
 class JerkChickenEntry:
